@@ -201,18 +201,24 @@ def reconciliation(before, after):
         if row['_merge'] == 'left_only':
             return 'removed'
         elif row['_merge'] == 'right_only':
+            if row['quantity_after'] == 0:
+                return 'out_of_stock'
             return 'added'
-        elif row['quantity_before'] < row['quantity_after']:
-            return 'increased'
-        elif row['quantity_before'] > row['quantity_after']:
-            return 'decreased'
         else:
-            return 'unchanged'
+            if row['quantity_after'] == 0:
+                return 'out_of_stock'
+            elif row['quantity_before'] < row['quantity_after']:
+                return 'increased'
+            elif row['quantity_before'] > row['quantity_after']:
+                return 'decreased'
+            else:
+                return 'unchanged'
  
     merged['change_type'] = merged.apply(classify_change, axis=1)
  
     # Compute quantity difference (after - before), NaN for added/removed items
     merged['quantity_diff'] = merged['quantity_after'] - merged['quantity_before']
+
  
     # Consolidate product_name: prefer before, fall back to after
     merged['product_name'] = merged['product_name_before'].fillna(merged['product_name_after'])
@@ -232,19 +238,19 @@ def reconciliation(before, after):
         'quantity_after',
         'quantity_diff',
         'last_counted',
-        'change_type'
+        'change_type',
     ]].copy()
  
     type_order = {'removed': 0, 'decreased': 1, 'increased': 2, 'added': 3, 'unchanged': 4}
     report['_sort'] = report['change_type'].map(type_order)
     report = report.sort_values(['_sort', 'sku']).drop(columns='_sort').reset_index(drop=True)
  
-
     counts = report['change_type'].value_counts()
     print(f"\nReconciliation summary:")
     for change_type in ['increased', 'decreased', 'removed', 'added', 'unchanged']:
         count = counts.get(change_type, 0)
         print(f"  {change_type}: {count}")
+    
  
     return report
 
